@@ -1,0 +1,382 @@
+import { Component, OnInit, signal, Input } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { Router } from '@angular/router';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { MatSelectModule } from '@angular/material/select';
+import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatDividerModule } from '@angular/material/divider';
+import { InventoryService } from '../../core/services/inventory.service';
+import { InventoryItem, ItemState } from '../../core/models/inventory.models';
+
+@Component({
+  selector: 'app-item-editor',
+  standalone: true,
+  imports: [
+    CommonModule,
+    ReactiveFormsModule,
+    MatFormFieldModule,
+    MatInputModule,
+    MatSelectModule,
+    MatButtonModule,
+    MatIconModule,
+    MatProgressSpinnerModule,
+    MatSnackBarModule,
+    MatDividerModule
+  ],
+  template: `
+    <div class="editor-page">
+      <div class="top-bar">
+        <button mat-icon-button (click)="cancel()" aria-label="Back">
+          <mat-icon>close</mat-icon>
+        </button>
+        <h2 class="page-title">Edit Item</h2>
+        <span class="spacer"></span>
+        <button mat-flat-button color="primary" [disabled]="saving()" (click)="save()">
+          @if (saving()) {
+            <mat-spinner diameter="18" class="btn-spinner" />
+          } @else {
+            <mat-icon>save</mat-icon>
+          }
+          Save
+        </button>
+      </div>
+
+      @if (loading()) {
+        <div class="spinner-wrap"><mat-spinner diameter="40" /></div>
+      } @else if (form) {
+        <form [formGroup]="form" class="editor-form">
+
+          <!-- Image upload -->
+          <div class="image-section">
+            <div class="image-preview">
+              @if (previewUrl()) {
+                <img [src]="previewUrl()!" alt="Preview" />
+              } @else {
+                <mat-icon class="no-img-icon">add_photo_alternate</mat-icon>
+              }
+            </div>
+            <label class="upload-btn">
+              <mat-icon>upload</mat-icon> Change Image
+              <input type="file" accept="image/*" (change)="onFileSelected($event)" hidden />
+            </label>
+          </div>
+
+          <mat-divider />
+
+          <div class="form-grid">
+            <mat-form-field appearance="outline">
+              <mat-label>SKU</mat-label>
+              <input matInput formControlName="sku" />
+            </mat-form-field>
+
+            <mat-form-field appearance="outline" class="span2">
+              <mat-label>Title</mat-label>
+              <input matInput formControlName="title" />
+            </mat-form-field>
+
+            <mat-form-field appearance="outline" class="span3">
+              <mat-label>Description</mat-label>
+              <textarea matInput formControlName="description" rows="3"></textarea>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>State</mat-label>
+              <mat-select formControlName="state">
+                @for (s of states; track s) {
+                  <mat-option [value]="s">{{ s }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Type</mat-label>
+              <input matInput formControlName="type" />
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Sub Type</mat-label>
+              <input matInput formControlName="subType" />
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Style</mat-label>
+              <input matInput formControlName="style" />
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Color</mat-label>
+              <input matInput formControlName="color" />
+            </mat-form-field>
+
+            <mat-form-field appearance="outline" class="span3">
+              <mat-label>Tags (comma-separated)</mat-label>
+              <input matInput formControlName="tags" />
+            </mat-form-field>
+          </div>
+
+          <mat-divider />
+          <p class="section-label">Financials</p>
+
+          <div class="form-grid">
+            <mat-form-field appearance="outline">
+              <mat-label>Acquisition Cost</mat-label>
+              <span matTextPrefix>$&nbsp;</span>
+              <input matInput type="number" formControlName="acquisitionCost" />
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Labor</mat-label>
+              <span matTextPrefix>$&nbsp;</span>
+              <input matInput type="number" formControlName="laborCost" />
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Materials</mat-label>
+              <span matTextPrefix>$&nbsp;</span>
+              <input matInput type="number" formControlName="materialsCost" />
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Prep</mat-label>
+              <span matTextPrefix>$&nbsp;</span>
+              <input matInput type="number" formControlName="prepCost" />
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Travel</mat-label>
+              <span matTextPrefix>$&nbsp;</span>
+              <input matInput type="number" formControlName="travelCost" />
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>List Price</mat-label>
+              <span matTextPrefix>$&nbsp;</span>
+              <input matInput type="number" formControlName="listPrice" />
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Sold Price</mat-label>
+              <span matTextPrefix>$&nbsp;</span>
+              <input matInput type="number" formControlName="soldPrice" />
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Profit</mat-label>
+              <span matTextPrefix>$&nbsp;</span>
+              <input matInput type="number" formControlName="profit" />
+            </mat-form-field>
+          </div>
+
+          <mat-divider />
+          <p class="section-label">Dates</p>
+
+          <div class="form-grid">
+            <mat-form-field appearance="outline">
+              <mat-label>Date Acquired</mat-label>
+              <input matInput type="date" formControlName="dateAcquired" />
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Date Listed</mat-label>
+              <input matInput type="date" formControlName="dateListed" />
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Date Sold</mat-label>
+              <input matInput type="date" formControlName="dateSold" />
+            </mat-form-field>
+          </div>
+
+        </form>
+      }
+    </div>
+  `,
+  styles: [`
+    .editor-page { max-width: 760px; margin: 0 auto; padding-bottom: 48px; }
+
+    .top-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 20px;
+      position: sticky;
+      top: 64px;
+      background: var(--mat-sys-surface);
+      z-index: 10;
+      padding: 8px 0;
+    }
+
+    .page-title { margin: 0; font-size: 1.1rem; }
+    .spacer { flex: 1; }
+    .btn-spinner { display: inline-block; margin-right: 4px; }
+
+    .spinner-wrap { display: flex; justify-content: center; padding: 48px; }
+
+    .image-section {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 16px 0;
+    }
+
+    .image-preview {
+      width: 100px;
+      height: 100px;
+      border-radius: 8px;
+      background: #f0f0f0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      img { width: 100%; height: 100%; object-fit: cover; }
+    }
+
+    .no-img-icon { font-size: 40px; color: #ccc; }
+
+    .upload-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      padding: 8px 16px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 14px;
+      color: #555;
+      &:hover { background: #f5f5f5; }
+    }
+
+    .editor-form { display: flex; flex-direction: column; gap: 16px; }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+
+    .span2 { grid-column: span 2; }
+    .span3 { grid-column: span 3; }
+
+    .section-label {
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #888;
+      margin: 8px 0 0;
+    }
+
+    mat-divider { margin: 8px 0; }
+
+    @media (max-width: 600px) {
+      .form-grid { grid-template-columns: 1fr 1fr; }
+      .span2, .span3 { grid-column: span 2; }
+      .top-bar { top: 56px; }
+    }
+  `]
+})
+export class ItemEditorComponent implements OnInit {
+  @Input() sku!: string;
+
+  form!: FormGroup;
+  loading = signal(true);
+  saving = signal(false);
+  previewUrl = signal<string | null>(null);
+  selectedFile: File | null = null;
+
+  states: ItemState[] = ['Processing', 'Listed', 'Sold', 'Archived'];
+
+  constructor(
+    private fb: FormBuilder,
+    private inventoryService: InventoryService,
+    private router: Router,
+    private snack: MatSnackBar
+  ) {}
+
+  ngOnInit() {
+    if (!this.sku) { this.loading.set(false); return; }
+
+    this.inventoryService.getBySkuake(this.sku).subscribe({
+      next: item => {
+        this.buildForm(item);
+        if (item.imageUrl) this.previewUrl.set(item.imageUrl);
+        this.loading.set(false);
+      },
+      error: () => this.loading.set(false)
+    });
+  }
+
+  private buildForm(item: InventoryItem) {
+    this.form = this.fb.group({
+      sku: [{ value: item.sku, disabled: true }],
+      title: [item.title, Validators.required],
+      description: [item.description],
+      state: [item.state, Validators.required],
+      type: [item.type],
+      subType: [item.subType],
+      style: [item.style],
+      color: [item.color],
+      tags: [item.tags],
+      acquisitionCost: [item.acquisitionCost],
+      laborCost: [item.laborCost],
+      materialsCost: [item.materialsCost],
+      prepCost: [item.prepCost],
+      travelCost: [item.travelCost],
+      listPrice: [item.listPrice],
+      soldPrice: [item.soldPrice],
+      profit: [item.profit],
+      dateAcquired: [item.dateAcquired],
+      dateListed: [item.dateListed],
+      dateSold: [item.dateSold]
+    });
+  }
+
+  onFileSelected(event: Event) {
+    const input = event.target as HTMLInputElement;
+    if (!input.files?.length) return;
+    this.selectedFile = input.files[0];
+    const reader = new FileReader();
+    reader.onload = e => this.previewUrl.set(e.target?.result as string);
+    reader.readAsDataURL(this.selectedFile);
+  }
+
+  save() {
+    if (!this.form.valid) return;
+    this.saving.set(true);
+
+    const values = this.form.getRawValue();
+    const payload = { ...values };
+
+    const doUpdate = () => {
+      this.inventoryService.update(this.sku, payload).subscribe({
+        next: () => {
+          this.snack.open('Saved', '', { duration: 2000 });
+          this.saving.set(false);
+          this.router.navigate(['/item', this.sku]);
+        },
+        error: () => {
+          this.snack.open('Save failed', '', { duration: 3000 });
+          this.saving.set(false);
+        }
+      });
+    };
+
+    if (this.selectedFile) {
+      this.inventoryService.uploadImage(this.sku, this.selectedFile).subscribe({
+        next: () => doUpdate(),
+        error: () => doUpdate()
+      });
+    } else {
+      doUpdate();
+    }
+  }
+
+  cancel() {
+    this.router.navigate(['/item', this.sku]);
+  }
+}

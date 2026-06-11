@@ -34,9 +34,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                   .HasConversion<string>()
                   .HasMaxLength(20)
                   .HasDefaultValue(ItemState.Processing);
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("UTC_TIMESTAMP()");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP(6)");
             entity.Property(e => e.UpdatedAt)
-                  .HasDefaultValueSql("UTC_TIMESTAMP()")
+                  .HasDefaultValueSql("CURRENT_TIMESTAMP(6)")
                   .ValueGeneratedOnAddOrUpdate();
         });
     }

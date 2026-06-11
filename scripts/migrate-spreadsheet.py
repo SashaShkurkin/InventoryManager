@@ -196,10 +196,10 @@ def generate_sql(all_rows):
         seen_skus.add(sku)
 
         lines.append(
-            "INSERT INTO inventory_items "
-            "(sku, title, acquisition_cost, labor_cost, materials_cost, prep_cost, travel_cost, "
-            "list_price, sold_price, profit, type, sub_type, style, color, "
-            "date_acquired, date_sold, date_listed, state) VALUES ("
+            "INSERT INTO InventoryItems "
+            "(Sku, Title, AcquisitionCost, LaborCost, MaterialsCost, PrepCost, TravelCost, "
+            "ListPrice, SoldPrice, Profit, Type, SubType, Style, Color, "
+            "DateAcquired, DateSold, DateListed, State) VALUES ("
             f"{escape(sku)}, "
             f"{escape(r['title'])}, "
             f"{decimal_sql(r['acq'])}, "

@@ -1,11 +1,18 @@
-import { Component, OnInit, signal } from '@angular/core';
+import { Component, OnInit, signal, computed } from '@angular/core';
 import { CommonModule, CurrencyPipe } from '@angular/common';
+import { Router } from '@angular/router';
+import { FormsModule } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatIconModule } from '@angular/material/icon';
+import { MatButtonModule } from '@angular/material/button';
+import { MatSelectModule } from '@angular/material/select';
+import { MatFormFieldModule } from '@angular/material/form-field';
 import { ItemCardComponent } from '../../shared/components/item-card/item-card.component';
 import { InventoryService } from '../../core/services/inventory.service';
-import { DashboardData, InventoryItem, ItemState } from '../../core/models/inventory.models';
+import { DashboardData, InventoryItem } from '../../core/models/inventory.models';
+
+type SortOption = 'recent' | 'oldest' | 'price-high' | 'price-low' | 'sku';
 
 @Component({
   selector: 'app-overview',
@@ -13,13 +20,36 @@ import { DashboardData, InventoryItem, ItemState } from '../../core/models/inven
   imports: [
     CommonModule,
     CurrencyPipe,
+    FormsModule,
     MatCardModule,
     MatProgressSpinnerModule,
     MatIconModule,
+    MatButtonModule,
+    MatSelectModule,
+    MatFormFieldModule,
     ItemCardComponent
   ],
   template: `
     <div class="overview-page">
+
+      <!-- Top actions -->
+      <div class="top-actions">
+        <button mat-flat-button color="primary" (click)="addNew()">
+          <mat-icon>add</mat-icon> New Item
+        </button>
+        <span class="spacer"></span>
+        <mat-form-field appearance="outline" class="sort-field">
+          <mat-label>Organize by</mat-label>
+          <mat-select [value]="sortBy()" (valueChange)="sortBy.set($event)">
+            <mat-option value="recent">Recent Date Acquired</mat-option>
+            <mat-option value="oldest">Oldest Date Acquired</mat-option>
+            <mat-option value="price-high">Listed Price High to Low</mat-option>
+            <mat-option value="price-low">Listed Price Low to High</mat-option>
+            <mat-option value="sku">By SKU (first 4)</mat-option>
+          </mat-select>
+        </mat-form-field>
+      </div>
+
       <!-- Dashboard cards -->
       @if (loading()) {
         <div class="spinner-wrap"><mat-spinner diameter="40" /></div>
@@ -69,7 +99,7 @@ import { DashboardData, InventoryItem, ItemState } from '../../core/models/inven
           </section>
         }
 
-        @for (group of groups(); track group.state) {
+        @for (group of sortedGroups(); track group.state) {
           @if (group.items.length > 0) {
             <section class="inventory-group">
               <h2 class="group-header">
@@ -90,6 +120,21 @@ import { DashboardData, InventoryItem, ItemState } from '../../core/models/inven
   `,
   styles: [`
     .overview-page { padding-bottom: 32px; }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .spacer { flex: 1; }
+
+    .sort-field {
+      width: 240px;
+      /* pull the extra bottom margin that mat-form-field adds */
+      margin-bottom: -1.25em;
+    }
 
     .spinner-wrap {
       display: flex;
@@ -153,6 +198,8 @@ import { DashboardData, InventoryItem, ItemState } from '../../core/models/inven
     }
 
     @media (max-width: 600px) {
+      .top-actions { flex-wrap: wrap; }
+      .sort-field { width: 100%; }
       .card-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
       .dashboard-grid { grid-template-columns: 1fr 1fr; }
       .dash-value { font-size: 1.2rem; }
@@ -163,8 +210,17 @@ export class OverviewComponent implements OnInit {
   loading = signal(true);
   dashboard = signal<DashboardData | null>(null);
   groups = signal<{ state: string; icon: string; items: InventoryItem[] }[]>([]);
+  sortBy = signal<SortOption>('recent');
 
-  constructor(private inventory: InventoryService) {}
+  sortedGroups = computed(() => {
+    const sort = this.sortBy();
+    return this.groups().map(g => ({
+      ...g,
+      items: this.sortItems([...g.items], sort)
+    }));
+  });
+
+  constructor(private inventory: InventoryService, private router: Router) {}
 
   ngOnInit() {
     this.inventory.getDashboard().subscribe({
@@ -184,5 +240,31 @@ export class OverviewComponent implements OnInit {
       },
       error: () => this.loading.set(false)
     });
+  }
+
+  addNew() {
+    this.router.navigate(['/item/new/edit']);
+  }
+
+  private sortItems(items: InventoryItem[], sort: SortOption): InventoryItem[] {
+    switch (sort) {
+      case 'recent':
+        return items.sort((a, b) => this.cmpDate(b.dateAcquired, a.dateAcquired));
+      case 'oldest':
+        return items.sort((a, b) => this.cmpDate(a.dateAcquired, b.dateAcquired));
+      case 'price-high':
+        return items.sort((a, b) => (b.listPrice ?? 0) - (a.listPrice ?? 0));
+      case 'price-low':
+        return items.sort((a, b) => (a.listPrice ?? 0) - (b.listPrice ?? 0));
+      case 'sku':
+        return items.sort((a, b) => a.sku.slice(0, 4).localeCompare(b.sku.slice(0, 4)));
+    }
+  }
+
+  private cmpDate(a?: string, b?: string): number {
+    if (!a && !b) return 0;
+    if (!a) return 1;
+    if (!b) return -1;
+    return a < b ? -1 : a > b ? 1 : 0;
   }
 }

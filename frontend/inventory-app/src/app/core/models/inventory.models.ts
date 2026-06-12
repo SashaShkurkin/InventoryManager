@@ -10,6 +10,7 @@ export interface InventoryItem {
   materialsCost?: number;
   prepCost?: number;
   travelCost?: number;
+  shippingCost?: number;
   listPrice?: number;
   soldPrice?: number;
   profit?: number;
@@ -59,6 +60,7 @@ export interface CreateInventoryItem {
   materialsCost?: number;
   prepCost?: number;
   travelCost?: number;
+  shippingCost?: number;
   listPrice?: number;
   soldPrice?: number;
   profit?: number;

@@ -34,7 +34,7 @@ import { InventoryItem, ItemState } from '../../core/models/inventory.models';
         <button mat-icon-button (click)="cancel()" aria-label="Back">
           <mat-icon>close</mat-icon>
         </button>
-        <h2 class="page-title">Edit Item</h2>
+        <h2 class="page-title">{{ isNew ? 'New Item' : 'Edit Item' }}</h2>
         <span class="spacer"></span>
         <button mat-flat-button color="primary" [disabled]="saving()" (click)="save()">
           @if (saving()) {
@@ -42,7 +42,7 @@ import { InventoryItem, ItemState } from '../../core/models/inventory.models';
           } @else {
             <mat-icon>save</mat-icon>
           }
-          Save
+          {{ isNew ? 'Create' : 'Save' }}
         </button>
       </div>
 
@@ -51,27 +51,31 @@ import { InventoryItem, ItemState } from '../../core/models/inventory.models';
       } @else if (form) {
         <form [formGroup]="form" class="editor-form">
 
-          <!-- Image upload -->
-          <div class="image-section">
-            <div class="image-preview">
-              @if (previewUrl()) {
-                <img [src]="previewUrl()!" alt="Preview" />
-              } @else {
-                <mat-icon class="no-img-icon">add_photo_alternate</mat-icon>
-              }
+          <!-- Image upload (edit mode only) -->
+          @if (!isNew) {
+            <div class="image-section">
+              <div class="image-preview">
+                @if (previewUrl()) {
+                  <img [src]="previewUrl()!" alt="Preview" />
+                } @else {
+                  <mat-icon class="no-img-icon">add_photo_alternate</mat-icon>
+                }
+              </div>
+              <label class="upload-btn">
+                <mat-icon>upload</mat-icon> Change Image
+                <input type="file" accept="image/*" (change)="onFileSelected($event)" hidden />
+              </label>
             </div>
-            <label class="upload-btn">
-              <mat-icon>upload</mat-icon> Change Image
-              <input type="file" accept="image/*" (change)="onFileSelected($event)" hidden />
-            </label>
-          </div>
-
-          <mat-divider />
+            <mat-divider />
+          }
 
           <div class="form-grid">
             <mat-form-field appearance="outline">
               <mat-label>SKU</mat-label>
-              <input matInput formControlName="sku" />
+              <input matInput formControlName="sku" [readonly]="!isNew" />
+              @if (isNew) {
+                <mat-hint>Unique identifier, e.g. CHAI-001</mat-hint>
+              }
             </mat-form-field>
 
             <mat-form-field appearance="outline" class="span2">
@@ -151,6 +155,12 @@ import { InventoryItem, ItemState } from '../../core/models/inventory.models';
               <mat-label>Travel</mat-label>
               <span matTextPrefix>$&nbsp;</span>
               <input matInput type="number" formControlName="travelCost" />
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Shipping Cost</mat-label>
+              <span matTextPrefix>$&nbsp;</span>
+              <input matInput type="number" formControlName="shippingCost" />
             </mat-form-field>
 
             <mat-form-field appearance="outline">
@@ -283,6 +293,8 @@ import { InventoryItem, ItemState } from '../../core/models/inventory.models';
 export class ItemEditorComponent implements OnInit {
   @Input() sku!: string;
 
+  get isNew(): boolean { return this.sku === 'new'; }
+
   form!: FormGroup;
   loading = signal(true);
   saving = signal(false);
@@ -299,6 +311,12 @@ export class ItemEditorComponent implements OnInit {
   ) {}
 
   ngOnInit() {
+    if (this.isNew) {
+      this.buildForm(null);
+      this.loading.set(false);
+      return;
+    }
+
     if (!this.sku) { this.loading.set(false); return; }
 
     this.inventoryService.getBySkuake(this.sku).subscribe({
@@ -311,29 +329,34 @@ export class ItemEditorComponent implements OnInit {
     });
   }
 
-  private buildForm(item: InventoryItem) {
+  private buildForm(item: InventoryItem | null) {
     this.form = this.fb.group({
-      sku: [{ value: item.sku, disabled: true }],
-      title: [item.title, Validators.required],
-      description: [item.description],
-      state: [item.state, Validators.required],
-      type: [item.type],
-      subType: [item.subType],
-      style: [item.style],
-      color: [item.color],
-      tags: [item.tags],
-      acquisitionCost: [item.acquisitionCost],
-      laborCost: [item.laborCost],
-      materialsCost: [item.materialsCost],
-      prepCost: [item.prepCost],
-      travelCost: [item.travelCost],
-      listPrice: [item.listPrice],
-      soldPrice: [item.soldPrice],
-      profit: [item.profit],
-      dateAcquired: [item.dateAcquired],
-      dateListed: [item.dateListed],
-      dateSold: [item.dateSold]
+      sku: [item?.sku ?? '', Validators.required],
+      title: [item?.title ?? '', Validators.required],
+      description: [item?.description ?? ''],
+      state: [item?.state ?? 'Processing', Validators.required],
+      type: [item?.type ?? ''],
+      subType: [item?.subType ?? ''],
+      style: [item?.style ?? ''],
+      color: [item?.color ?? ''],
+      tags: [item?.tags ?? ''],
+      acquisitionCost: [item?.acquisitionCost ?? null],
+      laborCost: [item?.laborCost ?? null],
+      materialsCost: [item?.materialsCost ?? null],
+      prepCost: [item?.prepCost ?? null],
+      travelCost: [item?.travelCost ?? null],
+      shippingCost: [item?.shippingCost ?? null],
+      listPrice: [item?.listPrice ?? null],
+      soldPrice: [item?.soldPrice ?? null],
+      profit: [item?.profit ?? null],
+      dateAcquired: [item?.dateAcquired ?? ''],
+      dateListed: [item?.dateListed ?? ''],
+      dateSold: [item?.dateSold ?? '']
     });
+
+    if (!this.isNew) {
+      this.form.get('sku')?.disable();
+    }
   }
 
   onFileSelected(event: Event) {
@@ -351,6 +374,21 @@ export class ItemEditorComponent implements OnInit {
 
     const values = this.form.getRawValue();
     const payload = { ...values };
+
+    if (this.isNew) {
+      this.inventoryService.create(payload).subscribe({
+        next: created => {
+          this.snack.open('Item created', '', { duration: 2000 });
+          this.saving.set(false);
+          this.router.navigate(['/item', created.sku]);
+        },
+        error: () => {
+          this.snack.open('Create failed', '', { duration: 3000 });
+          this.saving.set(false);
+        }
+      });
+      return;
+    }
 
     const doUpdate = () => {
       this.inventoryService.update(this.sku, payload).subscribe({
@@ -377,6 +415,10 @@ export class ItemEditorComponent implements OnInit {
   }
 
   cancel() {
-    this.router.navigate(['/item', this.sku]);
+    if (this.isNew) {
+      this.router.navigate(['/overview']);
+    } else {
+      this.router.navigate(['/item', this.sku]);
+    }
   }
 }

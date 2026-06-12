@@ -7,6 +7,7 @@ import {
   DashboardData,
   InventoryItem,
   InventoryListResponse,
+  ItemImage,
   ItemState,
   SearchSuggestion
 } from '../models/inventory.models';
@@ -58,17 +59,31 @@ export class InventoryService {
     return this.http.delete<void>(`${this.base}/inventory/${sku}`);
   }
 
-  uploadImage(sku: string, file: File): Observable<{ imageUrl: string }> {
-    const form = new FormData();
-    form.append('file', file);
-    return this.http.post<{ imageUrl: string }>(`${this.base}/inventory/${sku}/image`, form);
-  }
-
   getDashboard(): Observable<DashboardData> {
     return this.http.get<DashboardData>(`${this.base}/dashboard`);
   }
 
   getReport(type: 'all-time' | 'current' | 'revenue'): Observable<Blob> {
     return this.http.get(`${this.base}/reports/${type}`, { responseType: 'blob' });
+  }
+
+  // ── Image methods ──────────────────────────────────────────────────────────
+
+  getImages(sku: string): Observable<ItemImage[]> {
+    return this.http.get<ItemImage[]>(`${this.base}/inventory/${sku}/images`);
+  }
+
+  uploadItemImage(sku: string, file: File): Observable<ItemImage> {
+    const form = new FormData();
+    form.append('file', file);
+    return this.http.post<ItemImage>(`${this.base}/inventory/${sku}/images`, form);
+  }
+
+  deleteItemImage(sku: string, id: number): Observable<void> {
+    return this.http.delete<void>(`${this.base}/inventory/${sku}/images/${id}`);
+  }
+
+  imageDataUrl(sku: string, id: number): string {
+    return `${this.base}/inventory/${sku}/images/${id}/data`;
   }
 }

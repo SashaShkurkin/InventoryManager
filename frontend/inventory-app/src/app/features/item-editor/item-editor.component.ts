@@ -11,7 +11,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatDividerModule } from '@angular/material/divider';
 import { InventoryService } from '../../core/services/inventory.service';
-import { InventoryItem, ItemState } from '../../core/models/inventory.models';
+import { InventoryItem, ItemImage, ItemState } from '../../core/models/inventory.models';
 
 @Component({
   selector: 'app-item-editor',
@@ -51,22 +51,35 @@ import { InventoryItem, ItemState } from '../../core/models/inventory.models';
       } @else if (form) {
         <form [formGroup]="form" class="editor-form">
 
-          <!-- Image upload (edit mode only) -->
+          <!-- Photo slots (edit mode only — upload after item exists) -->
           @if (!isNew) {
-            <div class="image-section">
-              <div class="image-preview">
-                @if (previewUrl()) {
-                  <img [src]="previewUrl()!" alt="Preview" />
-                } @else {
-                  <mat-icon class="no-img-icon">add_photo_alternate</mat-icon>
-                }
-              </div>
-              <label class="upload-btn">
-                <mat-icon>upload</mat-icon> Change Image
-                <input type="file" accept="image/*" (change)="onFileSelected($event)" hidden />
-              </label>
+            <p class="section-label">Photos (up to 6)</p>
+            <div class="photo-grid">
+              @for (slot of photoSlots(); track slot.index) {
+                <div class="photo-slot">
+                  @if (slot.image) {
+                    <img [src]="inventoryService.imageDataUrl(sku, slot.image.id)" alt="Photo {{ slot.index + 1 }}" />
+                    <button class="slot-delete" mat-icon-button (click)="deletePhoto(slot.image.id)" [disabled]="uploadingSlot() !== null">
+                      <mat-icon>close</mat-icon>
+                    </button>
+                  } @else if (uploadingSlot() === slot.index) {
+                    <mat-spinner diameter="28" />
+                  } @else {
+                    <label class="slot-add">
+                      <mat-icon>add_photo_alternate</mat-icon>
+                      <input type="file" accept="image/jpeg,image/png,image/webp" (change)="uploadPhoto($event, slot.index)" hidden />
+                    </label>
+                  }
+                </div>
+              }
             </div>
             <mat-divider />
+          }
+
+          @if (isNew) {
+            <p class="new-item-photo-note">
+              <mat-icon>info</mat-icon> You can add photos after creating the item.
+            </p>
           }
 
           <div class="form-grid">
@@ -224,41 +237,66 @@ import { InventoryItem, ItemState } from '../../core/models/inventory.models';
     .page-title { margin: 0; font-size: 1.1rem; }
     .spacer { flex: 1; }
     .btn-spinner { display: inline-block; margin-right: 4px; }
-
     .spinner-wrap { display: flex; justify-content: center; padding: 48px; }
 
-    .image-section {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      padding: 16px 0;
+    .photo-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-bottom: 12px;
     }
 
-    .image-preview {
-      width: 100px;
-      height: 100px;
+    .photo-slot {
+      position: relative;
+      aspect-ratio: 1;
+      background: #f5f5f5;
       border-radius: 8px;
-      background: #f0f0f0;
+      overflow: hidden;
       display: flex;
       align-items: center;
       justify-content: center;
-      overflow: hidden;
-      img { width: 100%; height: 100%; object-fit: cover; }
+      border: 2px dashed #ddd;
+
+      img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
     }
 
-    .no-img-icon { font-size: 40px; color: #ccc; }
+    .slot-delete {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      background: rgba(0,0,0,0.55);
+      color: white;
+      width: 28px;
+      height: 28px;
+      line-height: 28px;
+      mat-icon { font-size: 18px; line-height: 18px; }
+    }
 
-    .upload-btn {
+    .slot-add {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      cursor: pointer;
+      color: #aaa;
+      gap: 4px;
+      mat-icon { font-size: 36px; }
+      &:hover { background: #ebebeb; color: #666; }
+    }
+
+    .new-item-photo-note {
       display: flex;
       align-items: center;
       gap: 6px;
-      cursor: pointer;
-      padding: 8px 16px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      font-size: 14px;
-      color: #555;
-      &:hover { background: #f5f5f5; }
+      color: #888;
+      font-size: 13px;
+      mat-icon { font-size: 16px; }
     }
 
     .editor-form { display: flex; flex-direction: column; gap: 16px; }
@@ -284,6 +322,7 @@ import { InventoryItem, ItemState } from '../../core/models/inventory.models';
     mat-divider { margin: 8px 0; }
 
     @media (max-width: 600px) {
+      .photo-grid { grid-template-columns: repeat(3, 1fr); gap: 6px; }
       .form-grid { grid-template-columns: 1fr 1fr; }
       .span2, .span3 { grid-column: span 2; }
       .top-bar { top: 56px; }
@@ -298,14 +337,19 @@ export class ItemEditorComponent implements OnInit {
   form!: FormGroup;
   loading = signal(true);
   saving = signal(false);
-  previewUrl = signal<string | null>(null);
-  selectedFile: File | null = null;
+  images = signal<ItemImage[]>([]);
+  uploadingSlot = signal<number | null>(null);
 
   states: ItemState[] = ['Processing', 'Listed', 'Sold', 'Archived'];
 
+  photoSlots = () => Array.from({ length: 6 }, (_, i) => ({
+    index: i,
+    image: this.images()[i] ?? null
+  }));
+
   constructor(
     private fb: FormBuilder,
-    private inventoryService: InventoryService,
+    public inventoryService: InventoryService,
     private router: Router,
     private snack: MatSnackBar
   ) {}
@@ -322,10 +366,14 @@ export class ItemEditorComponent implements OnInit {
     this.inventoryService.getBySkuake(this.sku).subscribe({
       next: item => {
         this.buildForm(item);
-        if (item.imageUrl) this.previewUrl.set(item.imageUrl);
         this.loading.set(false);
       },
       error: () => this.loading.set(false)
+    });
+
+    this.inventoryService.getImages(this.sku).subscribe({
+      next: imgs => this.images.set(imgs),
+      error: () => {}
     });
   }
 
@@ -359,13 +407,31 @@ export class ItemEditorComponent implements OnInit {
     }
   }
 
-  onFileSelected(event: Event) {
+  uploadPhoto(event: Event, slotIndex: number) {
     const input = event.target as HTMLInputElement;
     if (!input.files?.length) return;
-    this.selectedFile = input.files[0];
-    const reader = new FileReader();
-    reader.onload = e => this.previewUrl.set(e.target?.result as string);
-    reader.readAsDataURL(this.selectedFile);
+    const file = input.files[0];
+    input.value = '';
+
+    this.uploadingSlot.set(slotIndex);
+    this.inventoryService.uploadItemImage(this.sku, file).subscribe({
+      next: img => {
+        this.images.update(imgs => [...imgs, img]);
+        this.uploadingSlot.set(null);
+      },
+      error: (err) => {
+        const msg = err?.error || 'Upload failed';
+        this.snack.open(typeof msg === 'string' ? msg : 'Upload failed', '', { duration: 3000 });
+        this.uploadingSlot.set(null);
+      }
+    });
+  }
+
+  deletePhoto(id: number) {
+    this.inventoryService.deleteItemImage(this.sku, id).subscribe({
+      next: () => this.images.update(imgs => imgs.filter(i => i.id !== id)),
+      error: () => this.snack.open('Delete failed', '', { duration: 3000 })
+    });
   }
 
   save() {
@@ -390,28 +456,17 @@ export class ItemEditorComponent implements OnInit {
       return;
     }
 
-    const doUpdate = () => {
-      this.inventoryService.update(this.sku, payload).subscribe({
-        next: () => {
-          this.snack.open('Saved', '', { duration: 2000 });
-          this.saving.set(false);
-          this.router.navigate(['/item', this.sku]);
-        },
-        error: () => {
-          this.snack.open('Save failed', '', { duration: 3000 });
-          this.saving.set(false);
-        }
-      });
-    };
-
-    if (this.selectedFile) {
-      this.inventoryService.uploadImage(this.sku, this.selectedFile).subscribe({
-        next: () => doUpdate(),
-        error: () => doUpdate()
-      });
-    } else {
-      doUpdate();
-    }
+    this.inventoryService.update(this.sku, payload).subscribe({
+      next: () => {
+        this.snack.open('Saved', '', { duration: 2000 });
+        this.saving.set(false);
+        this.router.navigate(['/item', this.sku]);
+      },
+      error: () => {
+        this.snack.open('Save failed', '', { duration: 3000 });
+        this.saving.set(false);
+      }
+    });
   }
 
   cancel() {

@@ -29,6 +29,7 @@ public class InventoryItemDto
     public string State { get; set; } = "Processing";
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
+    public int? FirstImageId { get; set; }
 }
 
 public class CreateInventoryItemDto
@@ -62,4 +63,10 @@ public class UpdateInventoryItemDto : CreateInventoryItemDto { }
 public class PatchStateDto
 {
     public string State { get; set; } = string.Empty;
+}
+
+public class ItemImageMetaDto
+{
+    public int Id { get; set; }
+    public int SortOrder { get; set; }
 }

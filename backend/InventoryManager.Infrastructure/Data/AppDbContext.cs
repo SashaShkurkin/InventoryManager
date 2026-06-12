@@ -6,6 +6,7 @@ namespace InventoryManager.Infrastructure.Data;
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
     public DbSet<InventoryItem> InventoryItems => Set<InventoryItem>();
+    public DbSet<ItemImage> ItemImages => Set<ItemImage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -38,6 +39,16 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(e => e.UpdatedAt)
                   .HasDefaultValueSql("CURRENT_TIMESTAMP(6)")
                   .ValueGeneratedOnAddOrUpdate();
+        });
+
+        modelBuilder.Entity<ItemImage>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.ItemSku);
+            entity.Property(e => e.ItemSku).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.ImageData).HasColumnType("LONGBLOB").IsRequired();
+            entity.Property(e => e.ContentType).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP(6)");
         });
     }
 }

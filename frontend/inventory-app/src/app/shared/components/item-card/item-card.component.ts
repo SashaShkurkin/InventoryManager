@@ -5,6 +5,7 @@ import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatChipsModule } from '@angular/material/chips';
 import { InventoryItem } from '../../../core/models/inventory.models';
+import { InventoryService } from '../../../core/services/inventory.service';
 
 @Component({
   selector: 'app-item-card',
@@ -13,8 +14,8 @@ import { InventoryItem } from '../../../core/models/inventory.models';
   template: `
     <mat-card class="item-card" (click)="navigate()" tabindex="0" (keydown.enter)="navigate()">
       <div class="card-image">
-        @if (item.imageUrl) {
-          <img [src]="item.imageUrl" [alt]="item.title" />
+        @if (item.firstImageId) {
+          <img [src]="inventoryService.imageDataUrl(item.sku, item.firstImageId)" [alt]="item.title" />
         } @else {
           <div class="no-image">
             <mat-icon>chair</mat-icon>
@@ -75,7 +76,7 @@ import { InventoryItem } from '../../../core/models/inventory.models';
 export class ItemCardComponent {
   @Input({ required: true }) item!: InventoryItem;
 
-  constructor(private router: Router) {}
+  constructor(private router: Router, public inventoryService: InventoryService) {}
 
   navigate() {
     this.router.navigate(['/item', this.item.sku]);

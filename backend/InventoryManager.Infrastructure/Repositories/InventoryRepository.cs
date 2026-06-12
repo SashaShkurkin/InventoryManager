@@ -80,6 +80,7 @@ public class InventoryRepository(AppDbContext db) : IInventoryRepository
         existing.MaterialsCost = updated.MaterialsCost;
         existing.PrepCost = updated.PrepCost;
         existing.TravelCost = updated.TravelCost;
+        existing.ShippingCost = updated.ShippingCost;
         existing.ListPrice = updated.ListPrice;
         existing.SoldPrice = updated.SoldPrice;
         existing.Profit = updated.Profit;
@@ -88,7 +89,7 @@ public class InventoryRepository(AppDbContext db) : IInventoryRepository
         existing.Style = updated.Style;
         existing.Color = updated.Color;
         existing.Tags = updated.Tags;
-        existing.ImageUrl = updated.ImageUrl;
+        // ImageUrl is intentionally NOT updated here — managed via image upload endpoints
         existing.DateAcquired = updated.DateAcquired;
         existing.DateListed = updated.DateListed;
         existing.DateSold = updated.DateSold;
@@ -145,5 +146,55 @@ public class InventoryRepository(AppDbContext db) : IInventoryRepository
             ItemsSoldYtd = ytd.Count,
             ItemsSoldMtd = mtd.Count
         };
+    }
+
+    // ── Image methods ────────────────────────────────────────────────────────
+
+    public async Task<IEnumerable<ItemImageMetaDto>> GetImagesAsync(string sku) =>
+        await db.ItemImages
+            .Where(i => i.ItemSku == sku)
+            .OrderBy(i => i.SortOrder).ThenBy(i => i.Id)
+            .Select(i => new ItemImageMetaDto { Id = i.Id, SortOrder = i.SortOrder })
+            .ToListAsync();
+
+    public async Task<Dictionary<string, int>> GetFirstImageIdsAsync(IEnumerable<string> skus)
+    {
+        var skuList = skus.ToList();
+        var images = await db.ItemImages
+            .Where(img => skuList.Contains(img.ItemSku))
+            .OrderBy(img => img.SortOrder).ThenBy(img => img.Id)
+            .Select(img => new { img.ItemSku, img.Id })
+            .ToListAsync();
+
+        return images
+            .GroupBy(img => img.ItemSku)
+            .ToDictionary(g => g.Key, g => g.First().Id);
+    }
+
+    public async Task<ItemImage?> GetImageDataAsync(int id) =>
+        await db.ItemImages.FindAsync(id);
+
+    public async Task<ItemImage> AddImageAsync(string sku, byte[] data, string contentType, int sortOrder)
+    {
+        var img = new ItemImage
+        {
+            ItemSku = sku,
+            ImageData = data,
+            ContentType = contentType,
+            SortOrder = sortOrder,
+            CreatedAt = DateTime.UtcNow
+        };
+        db.ItemImages.Add(img);
+        await db.SaveChangesAsync();
+        return img;
+    }
+
+    public async Task<bool> DeleteImageAsync(int id)
+    {
+        var img = await db.ItemImages.FindAsync(id);
+        if (img is null) return false;
+        db.ItemImages.Remove(img);
+        await db.SaveChangesAsync();
+        return true;
     }
 }

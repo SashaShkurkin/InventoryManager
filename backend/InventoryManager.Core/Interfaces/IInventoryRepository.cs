@@ -14,4 +14,10 @@ public interface IInventoryRepository
     Task<bool> PatchStateAsync(string sku, ItemState state);
     Task<bool> DeleteAsync(string sku);
     Task<DashboardDto> GetDashboardAsync();
+
+    Task<IEnumerable<ItemImageMetaDto>> GetImagesAsync(string sku);
+    Task<Dictionary<string, int>> GetFirstImageIdsAsync(IEnumerable<string> skus);
+    Task<ItemImage?> GetImageDataAsync(int id);
+    Task<ItemImage> AddImageAsync(string sku, byte[] data, string contentType, int sortOrder);
+    Task<bool> DeleteImageAsync(int id);
 }

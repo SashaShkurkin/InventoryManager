@@ -26,6 +26,12 @@ export interface InventoryItem {
   state: ItemState;
   createdAt: string;
   updatedAt: string;
+  firstImageId?: number;
+}
+
+export interface ItemImage {
+  id: number;
+  sortOrder: number;
 }
 
 export interface InventoryListResponse {

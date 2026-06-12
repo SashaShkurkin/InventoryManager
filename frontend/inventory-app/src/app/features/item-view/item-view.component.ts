@@ -7,7 +7,7 @@ import { MatDividerModule } from '@angular/material/divider';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatChipsModule } from '@angular/material/chips';
 import { InventoryService } from '../../core/services/inventory.service';
-import { InventoryItem } from '../../core/models/inventory.models';
+import { InventoryItem, ItemImage } from '../../core/models/inventory.models';
 
 @Component({
   selector: 'app-item-view',
@@ -39,17 +39,29 @@ import { InventoryItem } from '../../core/models/inventory.models';
         <div class="spinner-wrap"><mat-spinner diameter="40" /></div>
       } @else if (item()) {
         <div class="item-content">
-          <!-- Image -->
-          <div class="image-wrap">
-            @if (item()!.imageUrl) {
-              <img [src]="item()!.imageUrl" [alt]="item()!.title" class="item-image" />
-            } @else {
-              <div class="no-image-large">
-                <mat-icon>chair</mat-icon>
-                <span>No Image</span>
+          <!-- Image gallery -->
+          @if (images().length > 0) {
+            <div class="gallery">
+              <div class="gallery-main">
+                <img [src]="inventoryService.imageDataUrl(sku, images()[activeImageIndex()].id)"
+                     [alt]="item()!.title" class="main-image" />
               </div>
-            }
-          </div>
+              @if (images().length > 1) {
+                <div class="gallery-thumbs">
+                  @for (img of images(); track img.id; let i = $index) {
+                    <div class="thumb" [class.active]="activeImageIndex() === i" (click)="activeImageIndex.set(i)">
+                      <img [src]="inventoryService.imageDataUrl(sku, img.id)" [alt]="'Photo ' + (i + 1)" />
+                    </div>
+                  }
+                </div>
+              }
+            </div>
+          } @else {
+            <div class="no-image-large">
+              <mat-icon>chair</mat-icon>
+              <span>No Image</span>
+            </div>
+          }
 
           <!-- Header -->
           <h1 class="item-title">{{ item()!.title }}</h1>
@@ -182,19 +194,44 @@ import { InventoryItem } from '../../core/models/inventory.models';
 
     .spinner-wrap { display: flex; justify-content: center; padding: 48px; }
 
-    .image-wrap {
+    .gallery {
+      margin-bottom: 20px;
+    }
+
+    .gallery-main {
       width: 100%;
-      max-height: 380px;
-      overflow: hidden;
       border-radius: 12px;
+      overflow: hidden;
       background: #f5f5f5;
       display: flex;
       align-items: center;
       justify-content: center;
-      margin-bottom: 20px;
+      height: 340px;
+      margin-bottom: 8px;
     }
 
-    .item-image { width: 100%; height: 380px; object-fit: contain; }
+    .main-image { width: 100%; height: 100%; object-fit: contain; }
+
+    .gallery-thumbs {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+    }
+
+    .thumb {
+      width: 72px;
+      height: 72px;
+      flex-shrink: 0;
+      border-radius: 6px;
+      overflow: hidden;
+      border: 2px solid transparent;
+      cursor: pointer;
+      opacity: 0.65;
+      transition: opacity 0.15s, border-color 0.15s;
+      img { width: 100%; height: 100%; object-fit: cover; }
+      &.active { border-color: var(--mat-sys-primary); opacity: 1; }
+      &:hover { opacity: 1; }
+    }
 
     .no-image-large {
       display: flex;
@@ -256,10 +293,12 @@ import { InventoryItem } from '../../core/models/inventory.models';
 export class ItemViewComponent implements OnInit {
   @Input() sku!: string;
   item = signal<InventoryItem | null>(null);
+  images = signal<ItemImage[]>([]);
+  activeImageIndex = signal(0);
   loading = signal(true);
 
   constructor(
-    private inventoryService: InventoryService,
+    public inventoryService: InventoryService,
     private router: Router
   ) {}
 
@@ -274,6 +313,10 @@ export class ItemViewComponent implements OnInit {
         this.loading.set(false);
       },
       error: () => this.loading.set(false)
+    });
+    this.inventoryService.getImages(this.sku).subscribe({
+      next: imgs => this.images.set(imgs),
+      error: () => {}
     });
   }
 

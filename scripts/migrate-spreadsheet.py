@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Migrate data from 'Furniture Inventory.xlsx' into inventory_db.
+Migrate data from 'Inventory.xlsx' into inventory_db.
 
 Usage:
     pip install openpyxl
@@ -52,8 +52,10 @@ def clean_decimal(value):
     """Return a float or None from a cell value."""
     if value is None:
         return None
+    s = str(value).replace("$", "").replace(",", "").strip()
+    # Handle non-numeric values like "Bund." (bundled items)
     try:
-        return float(str(value).replace("$", "").replace(",", "").strip())
+        return float(s)
     except ValueError:
         return None
 
@@ -105,13 +107,16 @@ def parse_sheet(ws, default_state):
         return None
 
     idx = {
-        "sku":       col(["sku"]),
+        # SKU: fall back to column 0 if header is blank (Inventory Archive sheet)
+        "sku":       col(["sku"]) if col(["sku"]) is not None else 0,
         "title":     col(["desc"]),
         "acq":       col(["acq"]),
-        "labor":     col(["labor"]),
+        # "Added" in Archive/Sales sheets = labor cost
+        "labor":     col(["labor", "added"]),
         "materials": col(["material"]),
         "prep":      col(["prep"]),
         "travel":    col(["travel"]),
+        "shipping":  col(["shipping"]),
         "list":      col(["list"]),
         "sold":      col(["sold"]),
         "profit":    col(["profit"]),
@@ -121,7 +126,7 @@ def parse_sheet(ws, default_state):
         "color":     col(["color"]),
         "date_acq":  col(["date acq"]),
         "date_sold": col(["date sold"]),
-        "added":     col(["added"]),
+        "state_col": col(["state"]),
     }
 
     rows = []
@@ -135,20 +140,16 @@ def parse_sheet(ws, default_state):
             continue
 
         title = v("title") or ""
-        acq = v("acq")
-        labor = v("labor")
-        materials = v("materials")
-        prep = v("prep")
-        travel = v("travel")
-        list_price = v("list")
-        sold_price = v("sold")
-        profit = v("profit")
-        date_acq = v("date_acq")
         date_sold = v("date_sold")
-        added = v("added")
 
-        # Derive state for Current Inventory sheet
-        if default_state is None:
+        # Use explicit State column if present, otherwise derive
+        state_val = v("state_col")
+        if state_val and str(state_val).strip():
+            state = str(state_val).strip().capitalize()
+            # Normalize common variations
+            state_map = {"sold": "Sold", "listed": "Listed", "processing": "Processing", "archived": "Archived"}
+            state = state_map.get(state.lower(), state)
+        elif default_state is None:
             state = "Sold" if excel_date(date_sold) else "Listed"
         else:
             state = default_state
@@ -156,21 +157,21 @@ def parse_sheet(ws, default_state):
         rows.append({
             "sku": str(sku).strip(),
             "title": str(title).strip(),
-            "acq": acq,
-            "labor": labor,
-            "materials": materials,
-            "prep": prep,
-            "travel": travel,
-            "list_price": list_price,
-            "sold_price": sold_price,
-            "profit": profit,
+            "acq": v("acq"),
+            "labor": v("labor"),
+            "materials": v("materials"),
+            "prep": v("prep"),
+            "travel": v("travel"),
+            "shipping": v("shipping"),
+            "list_price": v("list"),
+            "sold_price": v("sold"),
+            "profit": v("profit"),
             "type": v("type"),
             "sub_type": v("sub_type"),
             "style": v("style"),
             "color": v("color"),
-            "date_acq": date_acq,
+            "date_acq": v("date_acq"),
             "date_sold": date_sold,
-            "date_listed": added,
             "state": state,
         })
 
@@ -197,9 +198,9 @@ def generate_sql(all_rows):
 
         lines.append(
             "INSERT INTO InventoryItems "
-            "(Sku, Title, AcquisitionCost, LaborCost, MaterialsCost, PrepCost, TravelCost, "
+            "(Sku, Title, AcquisitionCost, LaborCost, MaterialsCost, PrepCost, TravelCost, ShippingCost, "
             "ListPrice, SoldPrice, Profit, Type, SubType, Style, Color, "
-            "DateAcquired, DateSold, DateListed, State) VALUES ("
+            "DateAcquired, DateSold, State) VALUES ("
             f"{escape(sku)}, "
             f"{escape(r['title'])}, "
             f"{decimal_sql(r['acq'])}, "
@@ -207,6 +208,7 @@ def generate_sql(all_rows):
             f"{decimal_sql(r['materials'])}, "
             f"{decimal_sql(r['prep'])}, "
             f"{decimal_sql(r['travel'])}, "
+            f"{decimal_sql(r['shipping'])}, "
             f"{decimal_sql(r['list_price'])}, "
             f"{decimal_sql(r['sold_price'])}, "
             f"{decimal_sql(r['profit'])}, "
@@ -216,7 +218,6 @@ def generate_sql(all_rows):
             f"{escape(r['color'])}, "
             f"{date_sql(r['date_acq'])}, "
             f"{date_sql(r['date_sold'])}, "
-            f"{date_sql(r['date_listed'])}, "
             f"{escape(r['state'])}"
             ");"
         )
@@ -226,7 +227,7 @@ def generate_sql(all_rows):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Migrate Furniture Inventory.xlsx to SQL")
+    parser = argparse.ArgumentParser(description="Migrate Inventory.xlsx to SQL")
     parser.add_argument("--output", default="migration.sql")
     parser.add_argument("--db", action="store_true", help="Execute against MySQL directly")
     args = parser.parse_args()

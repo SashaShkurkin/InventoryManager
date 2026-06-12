@@ -11,6 +11,7 @@ public class InventoryItem
     public decimal? MaterialsCost { get; set; }
     public decimal? PrepCost { get; set; }
     public decimal? TravelCost { get; set; }
+    public decimal? ShippingCost { get; set; }
     public decimal? ListPrice { get; set; }
     public decimal? SoldPrice { get; set; }
     public decimal? Profit { get; set; }

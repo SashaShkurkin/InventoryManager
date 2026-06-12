@@ -22,7 +22,7 @@ try:
 except ImportError:
     sys.exit("Install openpyxl first:  pip install openpyxl")
 
-XLSX_PATH = Path(__file__).parent.parent / "Furniture Inventory.xlsx"
+XLSX_PATH = Path(__file__).parent.parent / "Inventory.xlsx"
 
 # Sheet name → state to assign
 SHEET_STATE_MAP = {

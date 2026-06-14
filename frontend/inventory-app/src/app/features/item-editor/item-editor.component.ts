@@ -439,7 +439,12 @@ export class ItemEditorComponent implements OnInit {
     this.saving.set(true);
 
     const values = this.form.getRawValue();
-    const payload = { ...values };
+    const payload = {
+      ...values,
+      dateAcquired: values.dateAcquired || null,
+      dateListed:   values.dateListed   || null,
+      dateSold:     values.dateSold     || null,
+    };
 
     if (this.isNew) {
       this.inventoryService.create(payload).subscribe({

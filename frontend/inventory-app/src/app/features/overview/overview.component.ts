@@ -78,25 +78,15 @@ const ALL_GROUPS: Omit<StateGroup, 'items'>[] = [
         </div>
       </div>
 
-      <!-- State filter chips -->
-      <div class="state-filters">
-        @for (g of allGroups; track g.state) {
-          <button class="filter-chip"
-                  [class.active]="activeStates().has(g.state)"
-                  [style.--chip-color]="g.color"
-                  (click)="toggleState(g.state)">
-            <span class="chip-dot"></span>
-            {{ g.state }}
-            <span class="chip-count">({{ countFor(g.state) }})</span>
+      <!-- Dashboard cards (collapsed by default) -->
+      @if (!loading() && dashboard()) {
+        <div class="dash-toggle-row">
+          <button class="dash-toggle-btn" (click)="showDashboard.set(!showDashboard())">
+            <mat-icon>{{ showDashboard() ? 'expand_less' : 'expand_more' }}</mat-icon>
+            {{ showDashboard() ? 'Hide Metrics' : 'Show Metrics' }}
           </button>
-        }
-      </div>
-
-      <!-- Dashboard cards -->
-      @if (loading()) {
-        <div class="spinner-wrap"><mat-spinner diameter="40" /></div>
-      } @else {
-        @if (dashboard()) {
+        </div>
+        @if (showDashboard()) {
           <section class="dashboard-grid">
             <mat-card class="dash-card">
               <mat-card-header>
@@ -137,6 +127,25 @@ const ALL_GROUPS: Omit<StateGroup, 'items'>[] = [
             </mat-card>
           </section>
         }
+      }
+
+      <!-- State filter chips -->
+      <div class="state-filters">
+        @for (g of allGroups; track g.state) {
+          <button class="filter-chip"
+                  [class.active]="activeStates().has(g.state)"
+                  [style.--chip-color]="g.color"
+                  (click)="toggleState(g.state)">
+            <span class="chip-dot"></span>
+            {{ g.state }}
+            <span class="chip-count">({{ countFor(g.state) }})</span>
+          </button>
+        }
+      </div>
+
+      @if (loading()) {
+        <div class="spinner-wrap"><mat-spinner diameter="40" /></div>
+      } @else {
 
         @for (group of visibleGroups(); track group.state) {
           <section class="inventory-group">
@@ -207,6 +216,30 @@ const ALL_GROUPS: Omit<StateGroup, 'items'>[] = [
       button { color: #aaa; }
       button.active { color: var(--mat-sys-primary); }
     }
+
+    /* ── Dashboard toggle ── */
+    .dash-toggle-row {
+      margin-bottom: 8px;
+    }
+
+    .dash-toggle-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #aaa;
+      padding: 2px 0;
+      &:hover { color: #666; }
+      mat-icon { font-size: 16px; width: 16px; height: 16px; }
+    }
+
+    .dashboard-grid { margin-bottom: 16px; }
 
     /* ── State filter chips ── */
     .state-filters {
@@ -376,7 +409,8 @@ export class OverviewComponent implements OnInit {
   groups   = signal<StateGroup[]>([]);
   sortBy   = signal<SortOption>('recent');
   viewMode = signal<ViewMode>('grid');
-  activeStates = signal<Set<string>>(new Set(['Processing', 'Listed', 'Sold']));
+  activeStates   = signal<Set<string>>(new Set(['Processing', 'Listed', 'Sold']));
+  showDashboard  = signal(false);
 
   readonly allGroups = ALL_GROUPS;
 

@@ -24,13 +24,29 @@ except ImportError:
 
 XLSX_PATH = Path(__file__).parent.parent / "Inventory.xlsx"
 
-# Sheet name → state to assign
+# Sheet name → default state (None = derive from row data)
 SHEET_STATE_MAP = {
-    "Current Inventory": None,  # derived below
+    "Current Inventory": None,   # derived per-row below
     "Inventory Archive": "Archived",
 }
 # Any sheet whose name contains "Sales" → Sold
 SALES_SHEET_PATTERN = re.compile(r"sales", re.IGNORECASE)
+
+# Normalise whatever appears in the State/Status column to a canonical value
+STATE_NORMALISE = {
+    "processing":   "Processing",
+    "in progress":  "Processing",
+    "in-progress":  "Processing",
+    "wip":          "Processing",
+    "process":      "Processing",
+    "listed":       "Listed",
+    "listing":      "Listed",
+    "for sale":     "Listed",
+    "sold":         "Sold",
+    "archived":     "Archived",
+    "archive":      "Archived",
+    "inactive":     "Archived",
+}
 
 
 def excel_date(value):
@@ -126,7 +142,7 @@ def parse_sheet(ws, default_state):
         "color":     col(["color"]),
         "date_acq":  col(["date acq"]),
         "date_sold": col(["date sold"]),
-        "state_col": col(["state"]),
+        "state_col": col(["state", "status"]),
     }
 
     rows = []
@@ -142,17 +158,19 @@ def parse_sheet(ws, default_state):
         title = v("title") or ""
         date_sold = v("date_sold")
 
-        # Use explicit State column if present, otherwise derive
+        # Use explicit State/Status column if present, otherwise derive
         state_val = v("state_col")
         if state_val and str(state_val).strip():
-            state = str(state_val).strip().capitalize()
-            # Normalize common variations
-            state_map = {"sold": "Sold", "listed": "Listed", "processing": "Processing", "archived": "Archived"}
-            state = state_map.get(state.lower(), state)
-        elif default_state is None:
-            state = "Sold" if excel_date(date_sold) else "Listed"
-        else:
+            raw = str(state_val).strip().lower()
+            state = STATE_NORMALISE.get(raw, str(state_val).strip())
+        elif excel_date(date_sold):
+            # Any sheet: row has a sold date → it's Sold
+            state = "Sold"
+        elif default_state is not None:
             state = default_state
+        else:
+            # "Current Inventory" rows without a sold date → actively being worked on
+            state = "Processing"
 
         rows.append({
             "sku": str(sku).strip(),
@@ -228,15 +246,17 @@ def generate_sql(all_rows):
 
 def main():
     parser = argparse.ArgumentParser(description="Migrate Inventory.xlsx to SQL")
+    parser.add_argument("--input", default=None, help="Path to .xlsx file (default: ../Inventory.xlsx)")
     parser.add_argument("--output", default="migration.sql")
     parser.add_argument("--db", action="store_true", help="Execute against MySQL directly")
     args = parser.parse_args()
 
-    if not XLSX_PATH.exists():
-        sys.exit(f"Spreadsheet not found: {XLSX_PATH}")
+    xlsx_path = Path(args.input) if args.input else XLSX_PATH
+    if not xlsx_path.exists():
+        sys.exit(f"Spreadsheet not found: {xlsx_path}")
 
-    print(f"Loading {XLSX_PATH} ...")
-    wb = openpyxl.load_workbook(XLSX_PATH, data_only=True)
+    print(f"Loading {xlsx_path} ...")
+    wb = openpyxl.load_workbook(xlsx_path, data_only=True)
 
     all_rows = []
     for sheet_name in wb.sheetnames:

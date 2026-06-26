@@ -7,7 +7,7 @@ public interface IInventoryRepository
 {
     Task<(IEnumerable<InventoryItem> Items, int TotalCount)> GetFilteredAsync(
         string? state, decimal? minPrice, decimal? maxPrice, int page, int pageSize);
-    Task<IEnumerable<SearchSuggestionDto>> SearchSuggestionsAsync(string query);
+    Task<IEnumerable<SearchSuggestionDto>> SearchSuggestionsAsync(string query, string? state = null);
     Task<InventoryItem?> GetBySkuAsync(string sku);
     Task<InventoryItem> CreateAsync(InventoryItem item);
     Task<InventoryItem?> UpdateAsync(string sku, InventoryItem item);

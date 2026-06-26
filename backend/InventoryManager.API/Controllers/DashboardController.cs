@@ -1,4 +1,5 @@
 using InventoryManager.Core.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace InventoryManager.API.Controllers;
@@ -8,6 +9,7 @@ namespace InventoryManager.API.Controllers;
 public class DashboardController(IInventoryRepository repo) : ControllerBase
 {
     [HttpGet]
+    [Authorize(Policy = "OwnerOnly")]
     public async Task<IActionResult> Get()
     {
         var data = await repo.GetDashboardAsync();

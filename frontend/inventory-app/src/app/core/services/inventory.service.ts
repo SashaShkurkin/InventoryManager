@@ -33,10 +33,10 @@ export class InventoryService {
     return this.http.get<InventoryListResponse>(`${this.base}/inventory`, { params: p });
   }
 
-  search(q: string): Observable<SearchSuggestion[]> {
-    return this.http.get<SearchSuggestion[]>(`${this.base}/inventory/search`, {
-      params: new HttpParams().set('q', q)
-    });
+  search(q: string, state?: string): Observable<SearchSuggestion[]> {
+    let params = new HttpParams().set('q', q);
+    if (state) params = params.set('state', state);
+    return this.http.get<SearchSuggestion[]>(`${this.base}/inventory/search`, { params });
   }
 
   getBySkuake(sku: string): Observable<InventoryItem> {

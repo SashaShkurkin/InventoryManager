@@ -13,12 +13,19 @@ public class InventoryRepository(AppDbContext db) : IInventoryRepository
     {
         var query = db.InventoryItems.AsQueryable();
 
-        if (!string.IsNullOrWhiteSpace(state) &&
-            Enum.TryParse<ItemState>(state, true, out var parsedState))
+        if (!string.IsNullOrWhiteSpace(state))
         {
-            query = query.Where(i => i.State == parsedState);
+            var parts = state.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            var parsed = parts
+                .Where(p => Enum.TryParse<ItemState>(p, true, out _))
+                .Select(p => Enum.Parse<ItemState>(p, true))
+                .ToList();
+            if (parsed.Count == 1)
+                query = query.Where(i => i.State == parsed[0]);
+            else if (parsed.Count > 1)
+                query = query.Where(i => parsed.Contains(i.State));
         }
-        else if (string.IsNullOrWhiteSpace(state))
+        else
         {
             query = query.Where(i => i.State != ItemState.Archived);
         }
@@ -38,11 +45,12 @@ public class InventoryRepository(AppDbContext db) : IInventoryRepository
         return (items, total);
     }
 
-    public async Task<IEnumerable<SearchSuggestionDto>> SearchSuggestionsAsync(string query)
+    public async Task<IEnumerable<SearchSuggestionDto>> SearchSuggestionsAsync(string query, string? state = null)
     {
         var lower = query.ToLower();
-        return await db.InventoryItems
-            .Where(i => i.State != ItemState.Archived &&
+        var stateFilter = state != null && Enum.TryParse<ItemState>(state, out var parsed) ? parsed : (ItemState?)null;
+        var results = await db.InventoryItems
+            .Where(i => (stateFilter != null ? i.State == stateFilter : i.State != ItemState.Archived) &&
                         (i.Sku.ToLower().Contains(lower) ||
                          i.Title.ToLower().Contains(lower) ||
                          (i.Tags != null && i.Tags.ToLower().Contains(lower))))
@@ -56,6 +64,13 @@ public class InventoryRepository(AppDbContext db) : IInventoryRepository
                 ImageUrl = i.ImageUrl
             })
             .ToListAsync();
+
+        var firstImages = await GetFirstImageIdsAsync(results.Select(r => r.Sku));
+        foreach (var r in results)
+            if (firstImages.TryGetValue(r.Sku, out var imgId))
+                r.FirstImageId = imgId;
+
+        return results;
     }
 
     public async Task<InventoryItem?> GetBySkuAsync(string sku) =>
@@ -63,6 +78,7 @@ public class InventoryRepository(AppDbContext db) : IInventoryRepository
 
     public async Task<InventoryItem> CreateAsync(InventoryItem item)
     {
+        item.CostCode = ComputeCostCode(item);
         db.InventoryItems.Add(item);
         await db.SaveChangesAsync();
         return item;
@@ -94,6 +110,14 @@ public class InventoryRepository(AppDbContext db) : IInventoryRepository
         existing.DateListed = updated.DateListed;
         existing.DateSold = updated.DateSold;
         existing.State = updated.State;
+        existing.Height = updated.Height;
+        existing.Width = updated.Width;
+        existing.LengthDepth = updated.LengthDepth;
+        existing.AgreedPrice = updated.AgreedPrice;
+        existing.PendingSaleDate = updated.PendingSaleDate;
+        existing.PendingSaleTime = updated.PendingSaleTime;
+        existing.PendingSaleMethod = updated.PendingSaleMethod;
+        existing.CostCode = ComputeCostCode(existing);
         existing.UpdatedAt = DateTime.UtcNow;
 
         await db.SaveChangesAsync();
@@ -127,24 +151,89 @@ public class InventoryRepository(AppDbContext db) : IInventoryRepository
     public async Task<DashboardDto> GetDashboardAsync()
     {
         var now = DateTime.UtcNow;
-        var ytdStart = new DateOnly(now.Year, 1, 1);
-        var mtdStart = new DateOnly(now.Year, now.Month, 1);
+        var ytdStart    = new DateOnly(now.Year, 1, 1);
+        var mtdStart    = new DateOnly(now.Year, now.Month, 1);
+        var rolling90   = DateOnly.FromDateTime(now.AddDays(-90));
 
-        var soldItems = await db.InventoryItems
-            .Where(i => i.State == ItemState.Sold && i.DateSold.HasValue)
+        // YTD = Sold + Archived (completed sales)
+        var ytdItems = await db.InventoryItems
+            .Where(i => (i.State == ItemState.Sold || i.State == ItemState.Archived)
+                        && i.DateSold.HasValue
+                        && i.DateSold >= ytdStart)
             .ToListAsync();
 
-        var ytd = soldItems.Where(i => i.DateSold >= ytdStart).ToList();
-        var mtd = soldItems.Where(i => i.DateSold >= mtdStart).ToList();
+        // MTD = Sold only (current month active sales)
+        var mtdItems = await db.InventoryItems
+            .Where(i => i.State == ItemState.Sold
+                        && i.DateSold.HasValue
+                        && i.DateSold >= mtdStart)
+            .ToListAsync();
+
+        // 90-day rolling window: Sold + Archived with dateSold in window
+        var rolling90Items = await db.InventoryItems
+            .Where(i => (i.State == ItemState.Sold || i.State == ItemState.Archived)
+                        && i.DateSold.HasValue
+                        && i.DateSold >= rolling90)
+            .ToListAsync();
+
+        // Per-item ROI % = profit / totalCost; skip items with zero cost basis
+        static decimal TotalCost(InventoryItem i) =>
+            (i.AcquisitionCost ?? 0) + (i.LaborCost ?? 0) + (i.MaterialsCost ?? 0)
+            + (i.PrepCost ?? 0) + (i.TravelCost ?? 0) + (i.ShippingCost ?? 0);
+
+        var roiSamples = rolling90Items
+            .Where(i => i.AcquisitionCost > 0)
+            .Select(i => (cost: TotalCost(i), profit: i.Profit ?? 0))
+            .Where(x => x.cost > 0)
+            .Select(x => x.profit / x.cost * 100m)
+            .ToList();
+
+        var rolling90DayRoiPct = roiSamples.Count > 0
+            ? roiSamples.Average()
+            : 0m;
+
+        // Listed inventory cost basis
+        var listedItems = await db.InventoryItems
+            .Where(i => i.State == ItemState.Listed)
+            .ToListAsync();
+
+        var listedCostBasis = listedItems.Sum(TotalCost);
+
+        // Current calendar week (Mon–Sun) snapshots
+        var today = DateOnly.FromDateTime(now);
+        var dow = (int)today.DayOfWeek;                     // 0=Sun … 6=Sat
+        var weekStart = today.AddDays(dow == 0 ? -6 : -(dow - 1)); // back to Monday
+
+        var weekSalesRevenue = await db.InventoryItems
+            .Where(i => (i.State == ItemState.Sold || i.State == ItemState.Archived)
+                        && i.DateSold.HasValue && i.DateSold >= weekStart)
+            .SumAsync(i => i.SoldPrice ?? 0);
+
+        var weekAcquisitionCost = await db.InventoryItems
+            .Where(i => i.DateAcquired.HasValue && i.DateAcquired >= weekStart)
+            .SumAsync(i => i.AcquisitionCost ?? 0);
+
+        // Apply 90-day ROI to listed cost basis, then apply 25% safety buffer
+        var projectedReturn = listedCostBasis * (rolling90DayRoiPct / 100m) * 0.75m;
 
         return new DashboardDto
         {
-            RevenueYtd = ytd.Sum(i => i.SoldPrice ?? 0),
-            ProfitYtd = ytd.Sum(i => i.Profit ?? 0),
-            RevenueMtd = mtd.Sum(i => i.SoldPrice ?? 0),
-            ProfitMtd = mtd.Sum(i => i.Profit ?? 0),
-            ItemsSoldYtd = ytd.Count,
-            ItemsSoldMtd = mtd.Count
+            RevenueYtd  = ytdItems.Sum(i => i.SoldPrice ?? 0),
+            ProfitYtd   = ytdItems.Sum(i => i.Profit   ?? 0),
+            RevenueMtd  = mtdItems.Sum(i => i.SoldPrice ?? 0),
+            ProfitMtd   = mtdItems.Sum(i => i.Profit   ?? 0),
+            ItemsSoldYtd = ytdItems.Count,
+            ItemsSoldMtd = mtdItems.Count,
+            Rolling90DayRoiPct    = Math.Round(rolling90DayRoiPct, 1),
+            Rolling90DayItemCount = roiSamples.Count,
+            ListedCostBasis       = listedCostBasis,
+            ProjectedReturn       = Math.Round(projectedReturn, 2),
+            ProjectedProfit       = Math.Round(projectedReturn - listedCostBasis, 2),
+            ProfitVelocity10k     = listedItems.Count > 0 && projectedReturn > listedCostBasis
+                ? (int)Math.Ceiling(10000m * listedItems.Count / (projectedReturn - listedCostBasis))
+                : 0,
+            WeekSalesRevenue    = weekSalesRevenue,
+            WeekAcquisitionCost = weekAcquisitionCost,
         };
     }
 
@@ -196,5 +285,19 @@ public class InventoryRepository(AppDbContext db) : IInventoryRepository
         db.ItemImages.Remove(img);
         await db.SaveChangesAsync();
         return true;
+    }
+
+    // Total cost → cents → zero-pad to 5 digits → reverse string
+    // e.g. $24.25 → 2425 → "02425" → "52420"
+    private static string? ComputeCostCode(InventoryItem item)
+    {
+        var total = (item.AcquisitionCost ?? 0) + (item.LaborCost ?? 0)
+                  + (item.MaterialsCost ?? 0) + (item.PrepCost ?? 0)
+                  + (item.TravelCost ?? 0) + (item.ShippingCost ?? 0);
+        if (total <= 0) return null;
+        var cents = (int)Math.Round(total * 100);
+        if (cents > 99999) cents = 99999; // cap at 5 digits
+        var padded = cents.ToString("D5");
+        return new string(padded.Reverse().ToArray());
     }
 }

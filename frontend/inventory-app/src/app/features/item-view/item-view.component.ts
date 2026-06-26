@@ -1,5 +1,6 @@
-import { Component, OnInit, signal, Input } from '@angular/core';
+import { Component, OnInit, signal, computed, Input } from '@angular/core';
 import { CommonModule, CurrencyPipe } from '@angular/common';
+import { Location } from '@angular/common';
 import { Router } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -7,6 +8,7 @@ import { MatDividerModule } from '@angular/material/divider';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatChipsModule } from '@angular/material/chips';
 import { InventoryService } from '../../core/services/inventory.service';
+import { AuthService } from '../../core/services/auth.service';
 import { InventoryItem, ItemImage } from '../../core/models/inventory.models';
 
 @Component({
@@ -28,7 +30,7 @@ import { InventoryItem, ItemImage } from '../../core/models/inventory.models';
           <mat-icon>arrow_back</mat-icon>
         </button>
         <span class="spacer"></span>
-        @if (item()) {
+        @if (item() && auth.isOwner()) {
           <button mat-stroked-button color="primary" (click)="edit()">
             <mat-icon>edit</mat-icon> Edit
           </button>
@@ -66,6 +68,14 @@ import { InventoryItem, ItemImage } from '../../core/models/inventory.models';
           <!-- Header -->
           <h1 class="item-title">{{ item()!.title }}</h1>
           <p class="item-price">{{ item()!.listPrice | currency }}</p>
+          @if (auth.isOwner() && totalCost() !== null) {
+            <p class="item-cost">
+              Total cost {{ totalCost() | currency }}
+              @if (item()!.listPrice) {
+                <span class="markup-label" [class.negative]="markup()! < 0">&nbsp;·&nbsp;{{ markup() }}% Return</span>
+              }
+            </p>
+          }
 
           @if (item()!.description) {
             <p class="item-desc">{{ item()!.description }}</p>
@@ -77,11 +87,7 @@ import { InventoryItem, ItemImage } from '../../core/models/inventory.models';
           <div class="fields-grid">
             <div class="field-row">
               <span class="field-label">SKU</span>
-              <span class="field-value mono">{{ item()!.sku }}</span>
-            </div>
-            <div class="field-row">
-              <span class="field-label">State</span>
-              <span class="field-value state-badge" [class]="item()!.state.toLowerCase()">{{ item()!.state }}</span>
+              <span class="field-value mono">{{ item()!.sku }}{{ item()!.costCode ?? '' }}</span>
             </div>
             @if (item()!.type) {
               <div class="field-row">
@@ -107,73 +113,81 @@ import { InventoryItem, ItemImage } from '../../core/models/inventory.models';
                 <span class="field-value">{{ item()!.color }}</span>
               </div>
             }
-            <mat-divider />
-            @if (item()!.acquisitionCost != null) {
+
+            <!-- Owner-only fields -->
+            @if (auth.isOwner()) {
               <div class="field-row">
-                <span class="field-label">Acquired</span>
-                <span class="field-value">{{ item()!.acquisitionCost | currency }}</span>
+                <span class="field-label">State</span>
+                <span class="field-value state-badge" [class]="item()!.state.toLowerCase()">{{ item()!.state === 'PendingSale' ? 'Pending Sale' : item()!.state }}</span>
               </div>
-            }
-            @if (item()!.laborCost != null) {
-              <div class="field-row">
-                <span class="field-label">Labor</span>
-                <span class="field-value">{{ item()!.laborCost | currency }}</span>
-              </div>
-            }
-            @if (item()!.materialsCost != null) {
-              <div class="field-row">
-                <span class="field-label">Materials</span>
-                <span class="field-value">{{ item()!.materialsCost | currency }}</span>
-              </div>
-            }
-            @if (item()!.prepCost != null) {
-              <div class="field-row">
-                <span class="field-label">Prep</span>
-                <span class="field-value">{{ item()!.prepCost | currency }}</span>
-              </div>
-            }
-            @if (item()!.travelCost != null) {
-              <div class="field-row">
-                <span class="field-label">Travel</span>
-                <span class="field-value">{{ item()!.travelCost | currency }}</span>
-              </div>
-            }
-            @if (item()!.soldPrice != null) {
-              <div class="field-row">
-                <span class="field-label">Sold For</span>
-                <span class="field-value">{{ item()!.soldPrice | currency }}</span>
-              </div>
-            }
-            @if (item()!.profit != null) {
-              <div class="field-row">
-                <span class="field-label">Profit</span>
-                <span class="field-value" [class.profit-pos]="item()!.profit! > 0">{{ item()!.profit | currency }}</span>
-              </div>
-            }
-            <mat-divider />
-            @if (item()!.dateAcquired) {
-              <div class="field-row">
-                <span class="field-label">Date Acquired</span>
-                <span class="field-value">{{ item()!.dateAcquired }}</span>
-              </div>
-            }
-            @if (item()!.dateListed) {
-              <div class="field-row">
-                <span class="field-label">Date Listed</span>
-                <span class="field-value">{{ item()!.dateListed }}</span>
-              </div>
-            }
-            @if (item()!.dateSold) {
-              <div class="field-row">
-                <span class="field-label">Date Sold</span>
-                <span class="field-value">{{ item()!.dateSold }}</span>
-              </div>
-            }
-            @if (item()!.tags) {
-              <div class="field-row">
-                <span class="field-label">Tags</span>
-                <span class="field-value">{{ item()!.tags }}</span>
-              </div>
+              <mat-divider />
+              @if (item()!.acquisitionCost != null) {
+                <div class="field-row">
+                  <span class="field-label">Acquired</span>
+                  <span class="field-value">{{ item()!.acquisitionCost | currency }}</span>
+                </div>
+              }
+              @if (item()!.laborCost != null) {
+                <div class="field-row">
+                  <span class="field-label">Labor</span>
+                  <span class="field-value">{{ item()!.laborCost | currency }}</span>
+                </div>
+              }
+              @if (item()!.materialsCost != null) {
+                <div class="field-row">
+                  <span class="field-label">Materials</span>
+                  <span class="field-value">{{ item()!.materialsCost | currency }}</span>
+                </div>
+              }
+              @if (item()!.prepCost != null) {
+                <div class="field-row">
+                  <span class="field-label">Staging/Listing</span>
+                  <span class="field-value">{{ item()!.prepCost | currency }}</span>
+                </div>
+              }
+              @if (item()!.travelCost != null) {
+                <div class="field-row">
+                  <span class="field-label">Travel</span>
+                  <span class="field-value">{{ item()!.travelCost | currency }}</span>
+                </div>
+              }
+              @if (item()!.soldPrice != null) {
+                <div class="field-row">
+                  <span class="field-label">Sold For</span>
+                  <span class="field-value">{{ item()!.soldPrice | currency }}</span>
+                </div>
+              }
+              @if (item()!.profit != null) {
+                <div class="field-row">
+                  <span class="field-label">Profit</span>
+                  <span class="field-value" [class.profit-pos]="item()!.profit! > 0">{{ item()!.profit | currency }}</span>
+                </div>
+              }
+              <mat-divider />
+              @if (item()!.dateAcquired) {
+                <div class="field-row">
+                  <span class="field-label">Date Acquired</span>
+                  <span class="field-value">{{ item()!.dateAcquired }}</span>
+                </div>
+              }
+              @if (item()!.dateListed) {
+                <div class="field-row">
+                  <span class="field-label">Date Listed</span>
+                  <span class="field-value">{{ item()!.dateListed }}</span>
+                </div>
+              }
+              @if (item()!.dateSold) {
+                <div class="field-row">
+                  <span class="field-label">Date Sold</span>
+                  <span class="field-value">{{ item()!.dateSold }}</span>
+                </div>
+              }
+              @if (item()!.tags) {
+                <div class="field-row">
+                  <span class="field-label">Tags</span>
+                  <span class="field-value">{{ item()!.tags }}</span>
+                </div>
+              }
             }
           </div>
         </div>
@@ -246,7 +260,10 @@ import { InventoryItem, ItemImage } from '../../core/models/inventory.models';
     }
 
     .item-title { font-size: 1.6rem; font-weight: 700; margin: 0 0 6px; }
-    .item-price { font-size: 1.3rem; font-weight: 700; color: var(--mat-sys-primary); margin: 0 0 12px; }
+    .item-price { font-size: 1.3rem; font-weight: 700; color: var(--mat-sys-primary); margin: 0 0 4px; }
+    .item-cost  { font-size: 0.85rem; color: #888; margin: 0 0 12px; }
+    .markup-label { color: #4caf50; font-weight: 600; }
+    .markup-label.negative { color: #ef4444; }
     .item-desc { color: #555; line-height: 1.6; margin: 0 0 16px; }
 
     .fields-grid { margin-top: 16px; }
@@ -297,9 +314,26 @@ export class ItemViewComponent implements OnInit {
   activeImageIndex = signal(0);
   loading = signal(true);
 
+  totalCost = computed(() => {
+    const i = this.item();
+    if (!i) return null;
+    const sum = (i.acquisitionCost ?? 0) + (i.laborCost ?? 0) + (i.prepCost ?? 0)
+              + (i.travelCost ?? 0) + (i.shippingCost ?? 0);
+    return sum > 0 ? sum : null;
+  });
+
+  markup = computed(() => {
+    const cost = this.totalCost();
+    const price = this.item()?.listPrice;
+    if (!cost || !price) return null;
+    return Math.round(((price - cost) / cost) * 100);
+  });
+
   constructor(
     public inventoryService: InventoryService,
-    private router: Router
+    public auth: AuthService,
+    private router: Router,
+    private location: Location
   ) {}
 
   ngOnInit() {
@@ -321,7 +355,7 @@ export class ItemViewComponent implements OnInit {
   }
 
   back() {
-    this.router.navigate(['/overview']);
+    this.location.back();
   }
 
   edit() {

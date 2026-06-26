@@ -1,10 +1,12 @@
 using InventoryManager.Core.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace InventoryManager.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize(Policy = "OwnerOnly")]
 public class ReportsController(IReportService reports) : ControllerBase
 {
     [HttpGet("all-time")]

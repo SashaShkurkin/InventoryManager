@@ -22,6 +22,7 @@ public class InventoryItemDto
     public string? Style { get; set; }
     public string? Color { get; set; }
     public string? Tags { get; set; }
+    public string? CostCode { get; set; }
     public string? ImageUrl { get; set; }
     public DateOnly? DateAcquired { get; set; }
     public DateOnly? DateListed { get; set; }
@@ -30,6 +31,17 @@ public class InventoryItemDto
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
     public int? FirstImageId { get; set; }
+
+    // Dimensions
+    public decimal? Height { get; set; }
+    public decimal? Width { get; set; }
+    public decimal? LengthDepth { get; set; }
+
+    // Pending Sale details
+    public decimal? AgreedPrice { get; set; }
+    public DateOnly? PendingSaleDate { get; set; }
+    public string? PendingSaleTime { get; set; }
+    public string? PendingSaleMethod { get; set; }
 }
 
 public class CreateInventoryItemDto
@@ -56,6 +68,17 @@ public class CreateInventoryItemDto
     public DateOnly? DateListed { get; set; }
     public DateOnly? DateSold { get; set; }
     public string State { get; set; } = "Processing";
+
+    // Dimensions
+    public decimal? Height { get; set; }
+    public decimal? Width { get; set; }
+    public decimal? LengthDepth { get; set; }
+
+    // Pending Sale details
+    public decimal? AgreedPrice { get; set; }
+    public DateOnly? PendingSaleDate { get; set; }
+    public string? PendingSaleTime { get; set; }
+    public string? PendingSaleMethod { get; set; }
 }
 
 public class UpdateInventoryItemDto : CreateInventoryItemDto { }

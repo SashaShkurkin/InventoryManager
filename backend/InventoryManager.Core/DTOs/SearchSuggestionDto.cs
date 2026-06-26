@@ -6,4 +6,5 @@ public class SearchSuggestionDto
     public string Title { get; set; } = string.Empty;
     public decimal? ListPrice { get; set; }
     public string? ImageUrl { get; set; }
+    public int? FirstImageId { get; set; }
 }

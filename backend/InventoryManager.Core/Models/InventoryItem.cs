@@ -20,6 +20,7 @@ public class InventoryItem
     public string? Style { get; set; }
     public string? Color { get; set; }
     public string? Tags { get; set; }
+    public string? CostCode { get; set; }
     public string? ImageUrl { get; set; }
     public DateOnly? DateAcquired { get; set; }
     public DateOnly? DateListed { get; set; }
@@ -27,12 +28,24 @@ public class InventoryItem
     public ItemState State { get; set; } = ItemState.Processing;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+    // Dimensions
+    public decimal? Height { get; set; }
+    public decimal? Width { get; set; }
+    public decimal? LengthDepth { get; set; }
+
+    // Pending Sale details
+    public decimal? AgreedPrice { get; set; }
+    public DateOnly? PendingSaleDate { get; set; }
+    public string? PendingSaleTime { get; set; }
+    public string? PendingSaleMethod { get; set; }
 }
 
 public enum ItemState
 {
     Processing,
     Listed,
+    PendingSale,
     Sold,
     Archived
 }

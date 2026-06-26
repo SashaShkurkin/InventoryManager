@@ -10,8 +10,11 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatDividerModule } from '@angular/material/divider';
+import { MatDatepickerModule } from '@angular/material/datepicker';
+import { MatNativeDateModule } from '@angular/material/core';
 import { InventoryService } from '../../core/services/inventory.service';
 import { InventoryItem, ItemImage, ItemState } from '../../core/models/inventory.models';
+import { OverviewStateService } from '../overview/overview-state.service';
 
 @Component({
   selector: 'app-item-editor',
@@ -26,7 +29,9 @@ import { InventoryItem, ItemImage, ItemState } from '../../core/models/inventory
     MatIconModule,
     MatProgressSpinnerModule,
     MatSnackBarModule,
-    MatDividerModule
+    MatDividerModule,
+    MatDatepickerModule,
+    MatNativeDateModule,
   ],
   template: `
     <div class="editor-page">
@@ -36,7 +41,12 @@ import { InventoryItem, ItemImage, ItemState } from '../../core/models/inventory
         </button>
         <h2 class="page-title">{{ isNew ? 'New Item' : 'Edit Item' }}</h2>
         <span class="spacer"></span>
-        <button mat-flat-button color="primary" [disabled]="saving()" (click)="save()">
+        @if (!isNew) {
+          <button mat-stroked-button color="warn" [disabled]="saving() || deleting()" (click)="deleteItem()">
+            <mat-icon>delete</mat-icon> Delete
+          </button>
+        }
+        <button mat-flat-button color="primary" [disabled]="saving() || deleting()" (click)="save()">
           @if (saving()) {
             <mat-spinner diameter="18" class="btn-spinner" />
           } @else {
@@ -96,6 +106,22 @@ import { InventoryItem, ItemImage, ItemState } from '../../core/models/inventory
               <input matInput formControlName="title" />
             </mat-form-field>
 
+            <!-- Dimensions -->
+            <mat-form-field appearance="outline">
+              <mat-label>Height (in)</mat-label>
+              <input matInput type="number" formControlName="height" />
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Width (in)</mat-label>
+              <input matInput type="number" formControlName="width" />
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Length / Depth (in)</mat-label>
+              <input matInput type="number" formControlName="lengthDepth" />
+            </mat-form-field>
+
             <mat-form-field appearance="outline" class="span3">
               <mat-label>Description</mat-label>
               <textarea matInput formControlName="description" rows="3"></textarea>
@@ -105,7 +131,7 @@ import { InventoryItem, ItemImage, ItemState } from '../../core/models/inventory
               <mat-label>State</mat-label>
               <mat-select formControlName="state">
                 @for (s of states; track s) {
-                  <mat-option [value]="s">{{ s }}</mat-option>
+                  <mat-option [value]="s">{{ stateLabel(s) }}</mat-option>
                 }
               </mat-select>
             </mat-form-field>
@@ -136,6 +162,50 @@ import { InventoryItem, ItemImage, ItemState } from '../../core/models/inventory
             </mat-form-field>
           </div>
 
+          <!-- Pending Sale details -->
+          <mat-divider />
+          <p class="section-label" [class.section-locked]="form.get('state')?.value !== 'PendingSale'">
+            <mat-icon class="section-icon">pending_actions</mat-icon>
+            Pending Sale Details
+            @if (form.get('state')?.value !== 'PendingSale') {
+              <span class="lock-hint">— set state to Pending Sale to enable</span>
+            }
+          </p>
+
+          <div class="form-grid">
+            <mat-form-field appearance="outline">
+              <mat-label>Agreed Price</mat-label>
+              <span matTextPrefix>$&nbsp;</span>
+              <input matInput type="number" formControlName="agreedPrice" />
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Sale Date</mat-label>
+              <input matInput [matDatepicker]="saleDatePicker" formControlName="pendingSaleDate" />
+              <mat-datepicker-toggle matIconSuffix [for]="saleDatePicker"></mat-datepicker-toggle>
+              <mat-datepicker #saleDatePicker></mat-datepicker>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Sale Time</mat-label>
+              <mat-select formControlName="pendingSaleTime">
+                @for (t of timeOptions; track t.value) {
+                  <mat-option [value]="t.value">{{ t.label }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Handoff Method</mat-label>
+              <mat-select formControlName="pendingSaleMethod">
+                <mat-option value="Pickup">Pickup</mat-option>
+                <mat-option value="PublicMeet">Public Meet</mat-option>
+                <mat-option value="Delivery">Delivery</mat-option>
+                <mat-option value="Shipping">Shipping</mat-option>
+              </mat-select>
+            </mat-form-field>
+          </div>
+
           <mat-divider />
           <p class="section-label">Financials</p>
 
@@ -159,7 +229,7 @@ import { InventoryItem, ItemImage, ItemState } from '../../core/models/inventory
             </mat-form-field>
 
             <mat-form-field appearance="outline">
-              <mat-label>Prep</mat-label>
+              <mat-label>Staging/Listing</mat-label>
               <span matTextPrefix>$&nbsp;</span>
               <input matInput type="number" formControlName="prepCost" />
             </mat-form-field>
@@ -317,7 +387,13 @@ import { InventoryItem, ItemImage, ItemState } from '../../core/models/inventory
       letter-spacing: 1px;
       color: #888;
       margin: 8px 0 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
     }
+    .section-locked { color: #ccc; }
+    .section-icon { font-size: 16px; width: 16px; height: 16px; }
+    .lock-hint { font-weight: 400; text-transform: none; letter-spacing: 0; font-size: 0.75rem; color: #bbb; }
 
     mat-divider { margin: 8px 0; }
 
@@ -337,10 +413,37 @@ export class ItemEditorComponent implements OnInit {
   form!: FormGroup;
   loading = signal(true);
   saving = signal(false);
+  deleting = signal(false);
   images = signal<ItemImage[]>([]);
   uploadingSlot = signal<number | null>(null);
 
-  states: ItemState[] = ['Processing', 'Listed', 'Sold', 'Archived'];
+  states: ItemState[] = ['Processing', 'Listed', 'PendingSale', 'Sold', 'Archived'];
+
+  readonly timeOptions = Array.from({ length: 96 }, (_, i) => {
+    const h = Math.floor(i / 4);
+    const m = (i % 4) * 15;
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const h12 = h % 12 || 12;
+    const value = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    const label = `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
+    return { value, label };
+  });
+
+  stateLabel(s: ItemState): string {
+    return s === 'PendingSale' ? 'Pending Sale' : s;
+  }
+
+  private parseSaleDate(dateStr?: string): Date | null {
+    if (!dateStr) return null;
+    const d = new Date(dateStr + 'T00:00:00');
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  private formatSaleDate(d: Date | null | string): string | null {
+    if (!d) return null;
+    if (typeof d === 'string') return d || null;
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
 
   photoSlots = () => Array.from({ length: 6 }, (_, i) => ({
     index: i,
@@ -351,7 +454,8 @@ export class ItemEditorComponent implements OnInit {
     private fb: FormBuilder,
     public inventoryService: InventoryService,
     private router: Router,
-    private snack: MatSnackBar
+    private snack: MatSnackBar,
+    private overviewState: OverviewStateService
   ) {}
 
   ngOnInit() {
@@ -378,6 +482,8 @@ export class ItemEditorComponent implements OnInit {
   }
 
   private buildForm(item: InventoryItem | null) {
+    const isPending = (item?.state ?? 'Processing') === 'PendingSale';
+
     this.form = this.fb.group({
       sku: [item?.sku ?? '', Validators.required],
       title: [item?.title ?? '', Validators.required],
@@ -388,6 +494,11 @@ export class ItemEditorComponent implements OnInit {
       style: [item?.style ?? ''],
       color: [item?.color ?? ''],
       tags: [item?.tags ?? ''],
+      // Dimensions
+      height: [item?.height ?? null],
+      width: [item?.width ?? null],
+      lengthDepth: [item?.lengthDepth ?? null],
+      // Financials
       acquisitionCost: [item?.acquisitionCost ?? null],
       laborCost: [item?.laborCost ?? null],
       materialsCost: [item?.materialsCost ?? null],
@@ -397,14 +508,35 @@ export class ItemEditorComponent implements OnInit {
       listPrice: [item?.listPrice ?? null],
       soldPrice: [item?.soldPrice ?? null],
       profit: [item?.profit ?? null],
+      // Dates
       dateAcquired: [item?.dateAcquired ?? ''],
       dateListed: [item?.dateListed ?? ''],
-      dateSold: [item?.dateSold ?? '']
+      dateSold: [item?.dateSold ?? ''],
+      // Pending Sale details (locked unless state is PendingSale)
+      agreedPrice:       [{ value: item?.agreedPrice ?? null,                    disabled: !isPending }],
+      pendingSaleDate:   [{ value: this.parseSaleDate(item?.pendingSaleDate),    disabled: !isPending }],
+      pendingSaleTime:   [{ value: item?.pendingSaleTime ?? null,                disabled: !isPending }],
+      pendingSaleMethod: [{ value: item?.pendingSaleMethod ?? null,              disabled: !isPending }],
     });
 
     if (!this.isNew) {
       this.form.get('sku')?.disable();
     }
+
+    // Lock/unlock and clear pending sale fields when state changes
+    this.form.get('state')!.valueChanges.subscribe((state: string) => {
+      const pending = state === 'PendingSale';
+      const pendingFields = ['agreedPrice', 'pendingSaleDate', 'pendingSaleTime', 'pendingSaleMethod'];
+      for (const f of pendingFields) {
+        const ctrl = this.form.get(f)!;
+        if (pending) {
+          ctrl.enable({ emitEvent: false });
+        } else {
+          ctrl.setValue(null, { emitEvent: false });
+          ctrl.disable({ emitEvent: false });
+        }
+      }
+    });
   }
 
   uploadPhoto(event: Event, slotIndex: number) {
@@ -435,20 +567,27 @@ export class ItemEditorComponent implements OnInit {
   }
 
   save() {
-    if (!this.form.valid) return;
+    if (!this.form.valid) {
+      this.form.markAllAsTouched();
+      this.snack.open('Please fill in SKU and Title before saving.', '', { duration: 3000 });
+      return;
+    }
     this.saving.set(true);
 
     const values = this.form.getRawValue();
     const payload = {
       ...values,
-      dateAcquired: values.dateAcquired || null,
-      dateListed:   values.dateListed   || null,
-      dateSold:     values.dateSold     || null,
+      dateAcquired:    values.dateAcquired    || null,
+      dateListed:      values.dateListed      || null,
+      dateSold:        values.dateSold        || null,
+      pendingSaleDate: this.formatSaleDate(values.pendingSaleDate),
+      pendingSaleTime: values.pendingSaleTime  || null,
     };
 
     if (this.isNew) {
       this.inventoryService.create(payload).subscribe({
         next: created => {
+          this.overviewState.loadedAsOwner.set(null);
           this.snack.open('Item created', '', { duration: 2000 });
           this.saving.set(false);
           this.router.navigate(['/item', created.sku]);
@@ -463,6 +602,7 @@ export class ItemEditorComponent implements OnInit {
 
     this.inventoryService.update(this.sku, payload).subscribe({
       next: () => {
+        this.overviewState.loadedAsOwner.set(null);
         this.snack.open('Saved', '', { duration: 2000 });
         this.saving.set(false);
         this.router.navigate(['/item', this.sku]);
@@ -470,6 +610,25 @@ export class ItemEditorComponent implements OnInit {
       error: () => {
         this.snack.open('Save failed', '', { duration: 3000 });
         this.saving.set(false);
+      }
+    });
+  }
+
+  deleteItem() {
+    const confirmed = window.confirm(
+      'Are you sure you want to delete this item instead of Archiving?'
+    );
+    if (!confirmed) return;
+
+    this.deleting.set(true);
+    this.inventoryService.delete(this.sku).subscribe({
+      next: () => {
+        this.snack.open('Item deleted', '', { duration: 2000 });
+        this.router.navigate(['/overview']);
+      },
+      error: () => {
+        this.snack.open('Delete failed', '', { duration: 3000 });
+        this.deleting.set(false);
       }
     });
   }
